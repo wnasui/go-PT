@@ -1,0 +1,13 @@
+mode: debug
+port: 8080
+url: http://localhost:8080
+max_check_count: 10
+database:
+  name: "12305"
+  host: "127.0.0.1:3306"
+  user: "root"
+  password: "wnasuicide18"
+redis:
+  host: "127.0.0.1:6379"
+  password: "wnasuicide18"
+  db: 0
