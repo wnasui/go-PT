@@ -15,3 +15,10 @@ type RedisConf struct {
 	Port     string // 主机端口
 	Password string // 密码
 }
+
+type RabbitMQConf struct {
+	Host     string // 主机地址
+	Port     string // 主机端口
+	User     string // 用户名
+	Password string // 密码
+}

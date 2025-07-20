@@ -11,3 +11,8 @@ redis:
   host: "127.0.0.1:6379"
   password: "wnasuicide18"
   db: 0
+rabbitmq:
+  host: "127.0.0.1"
+  port: "5672"
+  user: "guest"
+  password: "guest"

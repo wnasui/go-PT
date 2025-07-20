@@ -36,7 +36,7 @@ type Order struct {
 	OrderId     string           `json:"order_id"`
 	User        User             `json:"user"`
 	Ticket      Ticket           `json:"ticket"`
-	TotalPrice  int              `json:"total_price"`
+	TotalPrice  float64          `json:"total_price"`
 	OrderStatus enum.OrderStatus `json:"order_status"`
 	CreatedAt   time.Time        `json:"created_at"`
 	UpdatedAt   time.Time        `json:"updated_at"`

@@ -5,6 +5,7 @@ import (
 	"12305/model"
 	"fmt"
 
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
@@ -12,8 +13,9 @@ import (
 )
 
 var (
-	DB    *gorm.DB
-	Redis *redis.Client
+	DB       *gorm.DB
+	Redis    *redis.Client
+	RabbitMQ *amqp.Connection
 )
 
 func initViper() {
@@ -57,8 +59,22 @@ func InitRedis() {
 	})
 }
 
+func InitRabbitMQ() {
+	conf := &model.RabbitMQConf{
+		Host:     viper.GetString("rabbitmq.host"),
+		Port:     viper.GetString("rabbitmq.port"),
+		User:     viper.GetString("rabbitmq.user"),
+		Password: viper.GetString("rabbitmq.password"),
+	}
+	var err error
+	RabbitMQ, err = amqp.Dial(fmt.Sprintf("amqp://%s:%s@%s:%s/", conf.User, conf.Password, conf.Host, conf.Port))
+	if err != nil {
+		panic("failed to connect rabbitmq")
+	}
+}
 func init() {
 	initViper()
 	InitDatabase()
 	InitRedis()
+	InitRabbitMQ()
 }

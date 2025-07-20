@@ -27,6 +27,8 @@ type TicketRepoInterface interface {
 	CreateTicket(ctx context.Context, ticket *model.Ticket) (*model.Ticket, error)
 	Edit(ctx context.Context, ticket *model.Ticket) (bool, error)
 	Delete(ctx context.Context, ticket *model.Ticket) (bool, error)
+	//开启事务
+	ExecuteTransaction(fn func(r *TicketRepository) error) error
 }
 
 func (repo *TicketRepository) List(ctx context.Context, req *query.ListQuery) ([]*model.Ticket, error) {
@@ -145,4 +147,11 @@ func (repo *TicketRepository) Delete(ctx context.Context, ticket *model.Ticket) 
 		return false, err
 	}
 	return true, nil
+}
+
+func (repo *TicketRepository) ExecuteTransaction(fn func(r *TicketRepository) error) error {
+	return repo.DB.Transaction(func(tx *gorm.DB) error {
+		txTicketRepo := &TicketRepository{DB: tx}
+		return fn(txTicketRepo)
+	})
 }

@@ -15,6 +15,7 @@ import (
 type TicketHandler struct {
 	ticketService service.TicketSrv
 	redisRepo     repository.RedisRepository
+	localRepo     repository.LocalRepository
 }
 
 func (h *TicketHandler) GetEntity(ticket model.Ticket) response.Ticket {
@@ -96,19 +97,33 @@ func (h *TicketHandler) TicketBuyHandler(c *gin.Context) {
 		Total: 0,
 		Data:  nil,
 	}
-
-	//redis缓存扣减库存
 	var ticket model.Ticket
 	if err := c.ShouldBindJSON(&ticket); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
 		return
 	}
-	remotstock, err := h.redisRepo.DecrStock(c, &ticket, &model.RemotStock{})
-	if err != nil {
+	user, ok := c.Get("user")
+	if !ok {
+		entity.Code = int(enum.OperateFailed)
+		entity.Msg = enum.OperateFailed.String()
 		c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
 		return
 	}
-	entity.Data = remotstock
-	entity.Msg = "success"
-	c.JSON(http.StatusOK, gin.H{"entity": entity})
+	userInfo := user.(response.User)
+	//异步抢票
+	go func() {
+		result, err := h.ticketService.BuyTicket(c, &ticket, userInfo)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
+			return
+		}
+		if result {
+			entity.Msg = "success"
+		} else {
+			entity.Msg = "failed"
+		}
+		c.JSON(http.StatusOK, gin.H{"entity": entity})
+	}()
+	//跳转支付页面
+	c.Redirect(http.StatusFound, "/pay")
 }

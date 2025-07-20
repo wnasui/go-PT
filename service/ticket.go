@@ -3,16 +3,21 @@ package service
 import (
 	"12305/enum"
 	"12305/model"
+	"12305/mq/sender"
 	"12305/repository"
+	"12305/response"
 	"12305/utils"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
 
 type TicketService struct {
-	ticketRepo repository.TicketRepository
-	redisRepo  repository.RedisRepository
+	ticketRepo   repository.TicketRepository
+	redisRepo    repository.RedisRepository
+	localRepo    repository.LocalRepository
+	rabbitmqRepo sender.SenderStruct
 }
 
 type TicketSrv interface {
@@ -21,6 +26,7 @@ type TicketSrv interface {
 	Get(ctx context.Context, ticket *model.Ticket) (*model.Ticket, error)
 	GetByTicketTag(ctx context.Context, TicketTag []enum.TicketTag) ([]*model.Ticket, error)
 	GetByTicketNumber(ctx context.Context, seat int) (*model.Ticket, error)
+	BuyTicket(ctx context.Context, ticket *model.Ticket, user response.User) (bool, error)
 	Exist(ctx context.Context, ticket *model.Ticket) (bool, error)
 	Create(ctx context.Context, ticket *model.Ticket) (*model.Ticket, error)
 	Edit(ctx context.Context, ticket *model.Ticket) (bool, error)
@@ -63,6 +69,54 @@ func (s *TicketService) Exist(ctx context.Context, ticket *model.Ticket) (bool, 
 		return false, nil
 	}
 	return exist, nil
+}
+
+func (s *TicketService) BuyTicket(ctx context.Context, ticket *model.Ticket, user response.User) (bool, error) {
+	//开启事务
+	err := s.ticketRepo.ExecuteTransaction(func(r *repository.TicketRepository) error {
+		//本地扣减库存
+		localstock, err := s.localRepo.DecrStock(ctx, ticket, &model.LocalStock{})
+		if err != nil {
+			return err
+		}
+		if localstock == nil {
+			return errors.New("库存不足")
+		}
+		//redis扣减库存
+		remotstock, err := s.redisRepo.DecrStock(ctx, ticket, &model.RemotStock{})
+		if err != nil {
+			return err
+		}
+		if remotstock == nil {
+			return errors.New("库存不足")
+		}
+		//创建订单
+		order := &model.Order{
+			OrderId:     utils.GetUUID(),
+			OrderStatus: enum.OrderStatusPending,
+			TotalPrice:  ticket.TicketPrice,
+			CreateTime:  time.Now(),
+			UpdateTime:  time.Now(),
+			DeleteTime:  time.Now(),
+			User:        user,
+			Ticket:      *ticket,
+		}
+		//发送订单到mq
+		err = s.rabbitmqRepo.SendOrder(ctx, *order)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		//抢票失败，触发回滚
+		fmt.Println("抢票失败", err)
+		return false, err
+	}
+	//抢票成功
+	fmt.Println("抢票成功")
+	//待支付...
+	return true, nil
 }
 
 func (s *TicketService) Create(ctx context.Context, ticket *model.Ticket) (*model.Ticket, error) {

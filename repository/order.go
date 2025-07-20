@@ -22,6 +22,11 @@ type OrderRepoInterface interface {
 	CreateOrder(ctx context.Context, order *model.Order) (*model.Order, error)
 	Edit(ctx context.Context, order *model.Order) (bool, error)
 	Delete(ctx context.Context, order *model.Order) (bool, error)
+	//开启事务
+	ExecuteTransaction(fn func(ctx context.Context) error) error
+	// 处理消息队列数据
+	ProcessOrderFromMQ(ctx context.Context, order *model.Order) error
+	BatchProcessOrdersFromMQ(ctx context.Context, orders []*model.Order) error
 }
 
 func (repo *OrderRepository) List(ctx context.Context, req *query.ListQuery) ([]*model.Order, error) {
@@ -116,4 +121,50 @@ func (repo *OrderRepository) Delete(ctx context.Context, order model.Order) (boo
 		return false, err
 	}
 	return true, nil
+}
+
+func (repo *OrderRepository) ExecuteTransaction(fn func(r *OrderRepository) error) error {
+	return repo.DB.Transaction(func(tx *gorm.DB) error {
+		txOrderRepo := &OrderRepository{DB: tx}
+		return fn(txOrderRepo)
+	})
+}
+
+// ProcessOrderFromMQ 处理来自消息队列的订单数据
+func (repo *OrderRepository) ProcessOrderFromMQ(ctx context.Context, order *model.Order) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// 检查订单是否已存在
+	exists, err := repo.Exist(ctx, *order)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		// 如果订单已存在，更新订单状态
+		_, err := repo.Edit(ctx, order)
+		return err
+	} else {
+		// 如果订单不存在，创建新订单
+		_, err := repo.CreateOrder(ctx, order)
+		return err
+	}
+}
+
+// BatchProcessOrdersFromMQ 批量处理来自消息队列的订单数据
+func (repo *OrderRepository) BatchProcessOrdersFromMQ(ctx context.Context, orders []*model.Order) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	return repo.ExecuteTransaction(func(r *OrderRepository) error {
+		for _, order := range orders {
+			if err := r.ProcessOrderFromMQ(ctx, order); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
