@@ -29,6 +29,10 @@ type TicketRepoInterface interface {
 	Delete(ctx context.Context, ticket *model.Ticket) (bool, error)
 	//开启事务
 	ExecuteTransaction(fn func(r *TicketRepository) error) error
+	//乐观锁扣减库存
+	DecreaseStockWithOptimisticLock(ctx context.Context, ticketId string, version int64) (bool, error)
+	// 乐观锁更新票务状态
+	UpdateTicketStatusWithOptimisticLock(ctx context.Context, ticketId string, oldVersion int64, newStatus enum.TicketStatus) (bool, error)
 }
 
 func (repo *TicketRepository) List(ctx context.Context, req *query.ListQuery) ([]*model.Ticket, error) {
@@ -154,4 +158,43 @@ func (repo *TicketRepository) ExecuteTransaction(fn func(r *TicketRepository) er
 		txTicketRepo := &TicketRepository{DB: tx}
 		return fn(txTicketRepo)
 	})
+}
+
+func (repo *TicketRepository) DecreaseStockWithOptimisticLock(ctx context.Context, ticketId string, version int64) (bool, error) {
+	result := repo.DB.Model(&model.Ticket{}).
+		Where("ticket_id = ? AND version = ? AND status = ?", ticketId, version, enum.TicketStatusNormal).
+		Updates(map[string]interface{}{
+			"status":      enum.TicketStatusSold,
+			"version":     version + 1,
+			"update_time": time.Now(),
+		})
+
+	if result.Error != nil {
+		return false, result.Error
+	}
+
+	// 检查是否真的更新了记录
+	return result.RowsAffected > 0, nil
+}
+
+// UpdateTicketStatusWithOptimisticLock 使用乐观锁更新票务状态
+func (repo *TicketRepository) UpdateTicketStatusWithOptimisticLock(ctx context.Context, ticketId string, oldVersion int64, newStatus enum.TicketStatus) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	result := repo.DB.Model(&model.Ticket{}).
+		Where("ticket_id = ? AND version = ? AND status = ?", ticketId, oldVersion, enum.TicketStatusNormal).
+		Updates(map[string]interface{}{
+			"status":      newStatus,
+			"version":     oldVersion + 1,
+			"update_time": time.Now(),
+		})
+
+	if result.Error != nil {
+		return false, result.Error
+	}
+
+	// 检查是否真的更新了记录
+	return result.RowsAffected > 0, nil
 }

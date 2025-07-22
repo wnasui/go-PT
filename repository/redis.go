@@ -4,6 +4,7 @@ import (
 	"12305/model"
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -19,6 +20,59 @@ type RedisRepoInterface interface {
 	GetByTicketTag(ctx context.Context, tickettag string) ([]*model.Ticket, error)
 	DecrStock(ctx context.Context, ticket *model.Ticket, remotstock *model.RemotStock) (*model.RemotStock, error)
 	AddByTicketTag(ctx context.Context, tickettag string, remotstock *model.RemotStock) (*model.Ticket, error)
+	// 新增：分布式锁和库存一致性管理
+	AcquireTicketLock(ctx context.Context, ticketId string, expireTime time.Duration) (bool, error)
+	ReleaseTicketLock(ctx context.Context, ticketId string) error
+	SyncTicketToCache(ctx context.Context, ticket *model.Ticket) error
+	InvalidateTicketCache(ctx context.Context, ticketTag string) error
+}
+
+// 获取票务分布式锁
+func (repo *RedisRepository) AcquireTicketLock(ctx context.Context, ticketId string, expireTime time.Duration) (bool, error) {
+	lockKey := fmt.Sprintf("ticket_lock_%s", ticketId)
+
+	// 使用SET NX EX命令实现分布式锁
+	result, err := repo.Rdb.SetNX(ctx, lockKey, "1", expireTime).Result()
+	if err != nil {
+		return false, err
+	}
+
+	return result, nil
+}
+
+// 释放票务分布式锁
+func (repo *RedisRepository) ReleaseTicketLock(ctx context.Context, ticketId string) error {
+	lockKey := fmt.Sprintf("ticket_lock_%s", ticketId)
+
+	// 使用Lua脚本确保原子性释放锁
+	script := `
+		if redis.call("get", KEYS[1]) == ARGV[1] then
+			return redis.call("del", KEYS[1])
+		else
+			return 0
+		end
+	`
+
+	_, err := repo.Rdb.Eval(ctx, script, []string{lockKey}, []string{"1"}).Result()
+	return err
+}
+
+// 同步票务信息到缓存
+func (repo *RedisRepository) SyncTicketToCache(ctx context.Context, ticket *model.Ticket) error {
+	jsonData, err := json.Marshal(ticket)
+	if err != nil {
+		return err
+	}
+
+	// 使用Hash结构存储，便于批量操作
+	key := string(ticket.TicketTag)
+	return repo.Rdb.HSet(ctx, key, ticket.TicketId, jsonData).Err()
+}
+
+// 使票务缓存失效
+func (repo *RedisRepository) InvalidateTicketCache(ctx context.Context, ticketTag string) error {
+	// 删除整个车次的缓存，强制重新加载
+	return repo.Rdb.Del(ctx, ticketTag).Err()
 }
 
 // 采用根据车次缓存票（查redis如果没有该票则拉取所有同车次的票到redis）

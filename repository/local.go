@@ -17,43 +17,45 @@ type LocalRepository struct {
 type LocalRepoInterface interface {
 	Get(ctx context.Context, key string) (interface{}, error)
 	GetByTicketTag(ctx context.Context, tickettag string) ([]*model.Ticket, error)
-	DecrStock(ctx context.Context, ticket *model.Ticket, remotstock *model.RemotStock) (*model.LocalStock, error)
-	AddByTicketTag(ctx context.Context, tickettag string, remotstock *model.RemotStock) (*model.Ticket, error)
+	// 本地缓存不存在扣减，只读缓存
+	RefreshCache(ctx context.Context, tickettag string) error
+	InvalidateCache(ctx context.Context, tickettag string) error
 }
 
 var localCache = utils.GetCache()
 
-// 本地获取同车次票
+// 本地获取同车次票（只读）
 func (repo *LocalRepository) GetByTicketTag(ctx context.Context, tickettag string) ([]*model.Ticket, error) {
 	value, err := localCache.Get(ctx, tickettag)
 	if err != nil {
-		return nil, err
-	}
-	//若本地缓存没有则查找cache
-	if value == nil {
-		repo.RedisRepo.GetByTicketTag(ctx, tickettag)
+		// 本地缓存未命中，从Redis加载
+		return repo.refreshFromRedis(ctx, tickettag)
 	}
 	return value, nil
 }
 
-// 本地扣减库存
-func (repo *LocalRepository) DecrStock(ctx context.Context, ticket *model.Ticket, localstock *model.LocalStock) (*model.LocalStock, error) {
-	TicketSlice, err := localCache.Get(ctx, string(ticket.TicketTag))
+// refreshFromRedis 从Redis刷新本地缓存
+func (repo *LocalRepository) refreshFromRedis(ctx context.Context, tickettag string) ([]*model.Ticket, error) {
+	tickets, err := repo.RedisRepo.GetByTicketTag(ctx, tickettag)
 	if err != nil {
 		return nil, err
 	}
-	//若本地缓存没有则查找redis
-	if len(TicketSlice) == 0 {
-		repo.RedisRepo.GetByTicketTag(ctx, string(ticket.TicketTag))
-		return nil, nil
-	} else {
-		for i, Ticket := range TicketSlice {
-			if Ticket.TicketId == ticket.TicketId {
-				TicketSlice = append(TicketSlice[:i], TicketSlice[i+1:]...)
-			}
-		}
-		localstock.LocalStockNum = len(TicketSlice)
-		localCache.Set(ctx, string(ticket.TicketTag), TicketSlice, 10*time.Second)
-		return localstock, nil
+
+	// 更新本地缓存
+	if len(tickets) > 0 {
+		localCache.Set(ctx, tickettag, tickets, 30*time.Second) // 本地缓存30秒
 	}
+
+	return tickets, nil
+}
+
+// RefreshCache 刷新缓存
+func (repo *LocalRepository) RefreshCache(ctx context.Context, tickettag string) error {
+	_, err := repo.refreshFromRedis(ctx, tickettag)
+	return err
+}
+
+// InvalidateCache 使缓存失效
+func (repo *LocalRepository) InvalidateCache(ctx context.Context, tickettag string) error {
+	return localCache.Del(ctx, tickettag)
 }

@@ -71,51 +71,85 @@ func (s *TicketService) Exist(ctx context.Context, ticket *model.Ticket) (bool, 
 	return exist, nil
 }
 
+// BuyTicket 购买车票 - 使用分布式锁+乐观锁+缓存一致性管理
 func (s *TicketService) BuyTicket(ctx context.Context, ticket *model.Ticket, user response.User) (bool, error) {
-	//开启事务
-	err := s.ticketRepo.ExecuteTransaction(func(r *repository.TicketRepository) error {
-		//本地扣减库存
-		localstock, err := s.localRepo.DecrStock(ctx, ticket, &model.LocalStock{})
+	// 1. 获取分布式锁，防止同一张票被多个用户同时购买
+	lockAcquired, err := s.redisRepo.AcquireTicketLock(ctx, ticket.TicketId, 10*time.Second)
+	if err != nil {
+		return false, fmt.Errorf("获取分布式锁失败: %v", err)
+	}
+	if !lockAcquired {
+		return false, errors.New("票务繁忙，请稍后重试")
+	}
+
+	// 确保锁会被释放
+	defer func() {
+		if err := s.redisRepo.ReleaseTicketLock(ctx, ticket.TicketId); err != nil {
+			fmt.Printf("释放分布式锁失败: %v\n", err)
+		}
+	}()
+
+	// 2. 在事务中执行购票逻辑
+	err = s.ticketRepo.ExecuteTransaction(func(r *repository.TicketRepository) error {
+		// 3. 查询数据库中的票务状态
+		currentTicket, err := r.Get(ctx, ticket)
 		if err != nil {
-			return err
+			return fmt.Errorf("查询票务信息失败: %v", err)
 		}
-		if localstock == nil {
-			return errors.New("库存不足")
+
+		// 4. 检查票务状态
+		if currentTicket.TicketStatus != enum.TicketStatusNormal {
+			return errors.New("票已售出或不可用")
 		}
-		//redis扣减库存
-		remotstock, err := s.redisRepo.DecrStock(ctx, ticket, &model.RemotStock{})
+
+		// 5. 使用乐观锁更新票务状态
+		success, err := r.UpdateTicketStatusWithOptimisticLock(ctx, ticket.TicketId, currentTicket.Version, enum.TicketStatusSold)
 		if err != nil {
-			return err
+			return fmt.Errorf("更新票务状态失败: %v", err)
 		}
-		if remotstock == nil {
-			return errors.New("库存不足")
+
+		if !success {
+			return errors.New("抢票失败，票已被其他用户购买")
 		}
-		//创建订单
+
+		// 6. 创建订单
 		order := &model.Order{
 			OrderId:     utils.GetUUID(),
 			OrderStatus: enum.OrderStatusPending,
-			TotalPrice:  ticket.TicketPrice,
+			TotalPrice:  currentTicket.TicketPrice,
 			CreateTime:  time.Now(),
 			UpdateTime:  time.Now(),
-			DeleteTime:  time.Now(),
 			User:        user,
-			Ticket:      *ticket,
+			Ticket:      *currentTicket,
 		}
-		//发送订单到mq
-		err = s.rabbitmqRepo.SendOrder(ctx, *order)
-		if err != nil {
-			return err
+
+		// 7. 发送订单到消息队列
+		if err := s.rabbitmqRepo.SendOrder(ctx, *order); err != nil {
+			return fmt.Errorf("发送订单到消息队列失败: %v", err)
 		}
+
+		// 8. 更新缓存 - 异步处理，不影响主流程
+		go func() {
+			// 更新Redis缓存
+			if err := s.redisRepo.SyncTicketToCache(ctx, currentTicket); err != nil {
+				fmt.Printf("更新Redis缓存失败: %v\n", err)
+			}
+
+			// 使本地缓存失效，强制重新加载
+			if err := s.localRepo.InvalidateCache(ctx, string(currentTicket.TicketTag)); err != nil {
+				fmt.Printf("使本地缓存失效失败: %v\n", err)
+			}
+		}()
+
 		return nil
 	})
+
 	if err != nil {
-		//抢票失败，触发回滚
-		fmt.Println("抢票失败", err)
+		fmt.Printf("抢票失败: %v\n", err)
 		return false, err
 	}
-	//抢票成功
+
 	fmt.Println("抢票成功")
-	//待支付...
 	return true, nil
 }
 
