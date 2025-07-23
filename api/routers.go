@@ -25,8 +25,11 @@ func InitRouter(UserHandler *handler.UserHandler, TicketHandler *handler.TicketH
 
 	router.Group("/ticket")
 	{
-		router.GET("/list", TicketHandler.TicketListHandler)
+		router.GET("/list", TicketHandler.TicketListReadThroughHandler)
 		router.POST("/buy", TicketHandler.TicketBuyHandler)
+		// 新增：缓存管理路由
+		router.POST("/cache/warmup", TicketHandler.WarmUpCache)
+		router.GET("/cache/stats", TicketHandler.GetCacheStats)
 	}
 
 	router.Group("/order")

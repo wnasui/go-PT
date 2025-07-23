@@ -20,6 +20,8 @@ type LocalRepoInterface interface {
 	// 本地缓存不存在扣减，只读缓存
 	RefreshCache(ctx context.Context, tickettag string) error
 	InvalidateCache(ctx context.Context, tickettag string) error
+	// 新增：缓存统计
+	GetCacheStats(ctx context.Context) (map[string]interface{}, error)
 }
 
 var localCache = utils.GetCache()
@@ -34,7 +36,7 @@ func (repo *LocalRepository) GetByTicketTag(ctx context.Context, tickettag strin
 	return value, nil
 }
 
-// refreshFromRedis 从Redis刷新本地缓存
+// 从Redis刷新本地缓存
 func (repo *LocalRepository) refreshFromRedis(ctx context.Context, tickettag string) ([]*model.Ticket, error) {
 	tickets, err := repo.RedisRepo.GetByTicketTag(ctx, tickettag)
 	if err != nil {
@@ -49,13 +51,18 @@ func (repo *LocalRepository) refreshFromRedis(ctx context.Context, tickettag str
 	return tickets, nil
 }
 
-// RefreshCache 刷新缓存
+// 刷新缓存
 func (repo *LocalRepository) RefreshCache(ctx context.Context, tickettag string) error {
 	_, err := repo.refreshFromRedis(ctx, tickettag)
 	return err
 }
 
-// InvalidateCache 使缓存失效
+// 使缓存失效
 func (repo *LocalRepository) InvalidateCache(ctx context.Context, tickettag string) error {
 	return localCache.Del(ctx, tickettag)
+}
+
+// 获取本地缓存统计信息
+func (repo *LocalRepository) GetCacheStats(ctx context.Context) (map[string]interface{}, error) {
+	return localCache.GetStats(ctx)
 }

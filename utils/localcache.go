@@ -19,6 +19,8 @@ type LocalCache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
 	Del(ctx context.Context, key string) error
 	Len(ctx context.Context, key string) (int, error)
+	// 新增：获取缓存统计
+	GetStats(ctx context.Context) (map[string]interface{}, error)
 }
 
 func GetCache() *Cache {
@@ -60,4 +62,21 @@ func (c *Cache) Len(ctx context.Context, key string) (int, error) {
 		return 0, errors.New("key not found")
 	}
 	return len(value.([]*model.Ticket)), nil
+}
+
+// 获取缓存统计信息
+func (c *Cache) GetStats(ctx context.Context) (map[string]interface{}, error) {
+	stats := make(map[string]interface{})
+
+	// 统计缓存中的键数量
+	count := 0
+	c.data.Range(func(key, value interface{}) bool {
+		count++
+		return true
+	})
+
+	stats["cache_count"] = count
+	stats["cache_type"] = "local_memory"
+
+	return stats, nil
 }

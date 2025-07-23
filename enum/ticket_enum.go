@@ -12,9 +12,9 @@ const (
 
 // 简化为枚举表示车次，前端可以按照枚举值查询或是修改车次并显示为详细信息
 const (
-	TicketTagA_A TicketTag = "A" //8-9点左右 成都到河南
-	TicketTagA_B TicketTag = "B" //12-13点左右 河南到成都
-	TicketTagA_C TicketTag = "C" //18-19点左右 河南到杭州
+	G101 TicketTag = "G101" //8-9点左右 成都到河南
+	G102 TicketTag = "G102" //12-13点左右 河南到成都
+	G103 TicketTag = "G103" //18-19点左右 河南到杭州
 )
 
 func (s TicketStatus) String() string {
@@ -32,12 +32,12 @@ func (s TicketStatus) String() string {
 
 func (s TicketTag) String() string {
 	switch s {
-	case TicketTagA_A:
-		return "A"
-	case TicketTagA_B:
-		return "B"
-	case TicketTagA_C:
-		return "C"
+	case G101:
+		return "G101"
+	case G102:
+		return "G102"
+	case G103:
+		return "G103"
 	default:
 		return "UNKNOWN"
 	}

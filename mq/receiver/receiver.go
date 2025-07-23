@@ -27,44 +27,44 @@ func NewReceiver(conn *amqp.Connection, orderRepo repository.OrderRepoInterface)
 	}
 }
 
-func (r *ReceiverStruct) ReceiveOrder(ctx context.Context) model.Order {
-	ch, err := r.conn.Channel()
-	if err != nil {
-		log.Fatalf("Failed to open a channel: %v", err)
-	}
-	defer ch.Close()
-	q, err := ch.QueueDeclare(
-		"order",
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		log.Fatalf("Failed to declare a queue: %v", err)
-	}
-	msgs, err := ch.Consume(
-		q.Name,
-		"",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		log.Fatalf("Failed to publish a message: %v", err)
-	}
-	Order := model.Order{}
-	for d := range msgs {
-		err := json.Unmarshal(d.Body, &Order)
-		if err != nil {
-			log.Fatalf("Failed to unmarshal body: %v", err)
-		}
-	}
-	return Order
-}
+// func (r *ReceiverStruct) ReceiveOrder(ctx context.Context) model.Order {
+// 	ch, err := r.conn.Channel()
+// 	if err != nil {
+// 		log.Fatalf("Failed to open a channel: %v", err)
+// 	}
+// 	defer ch.Close()
+// 	q, err := ch.QueueDeclare(
+// 		"order",
+// 		false,
+// 		false,
+// 		false,
+// 		false,
+// 		nil,
+// 	)
+// 	if err != nil {
+// 		log.Fatalf("Failed to declare a queue: %v", err)
+// 	}
+// 	msgs, err := ch.Consume(
+// 		q.Name,
+// 		"",
+// 		true,
+// 		false,
+// 		false,
+// 		false,
+// 		nil,
+// 	)
+// 	if err != nil {
+// 		log.Fatalf("Failed to publish a message: %v", err)
+// 	}
+// 	Order := model.Order{}
+// 	for d := range msgs {
+// 		err := json.Unmarshal(d.Body, &Order)
+// 		if err != nil {
+// 			log.Fatalf("Failed to unmarshal body: %v", err)
+// 		}
+// 	}
+// 	return Order
+// }
 
 // StartOrderConsumer 启动订单消息消费者
 func (r *ReceiverStruct) StartOrderConsumer(ctx context.Context) error {
