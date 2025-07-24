@@ -75,6 +75,7 @@ func (cp *CacheProtector) GetHotKeysStats() map[string]interface{} {
 	return stats
 }
 
+// 布隆
 type BloomFilter struct {
 	bitmap []bool
 	size   int
@@ -88,14 +89,12 @@ func NewBloomFilter(size, hashes int) *BloomFilter {
 		hashes: hashes,
 	}
 }
-
 func (bf *BloomFilter) Add(key string) {
 	for i := 0; i < bf.hashes; i++ {
 		hash := bf.hash(key, i)
 		bf.bitmap[hash%bf.size] = true
 	}
 }
-
 func (bf *BloomFilter) MayContain(key string) bool {
 	for i := 0; i < bf.hashes; i++ {
 		hash := bf.hash(key, i)
@@ -115,6 +114,26 @@ func (bf *BloomFilter) hash(key string, seed int) int {
 	return hash
 }
 
+// 获取布隆过滤器统计信息
+func (bf *BloomFilter) GetStats() map[string]interface{} {
+	stats := make(map[string]interface{})
+
+	totalBits := len(bf.bitmap)
+	setBits := 0
+	for _, bit := range bf.bitmap {
+		if bit {
+			setBits++
+		}
+	}
+
+	stats["total_bits"] = totalBits
+	stats["set_bits"] = setBits
+	stats["utilization_rate"] = float64(setBits) / float64(totalBits)
+	stats["hash_functions"] = bf.hashes
+
+	return stats
+}
+
 // 限流器
 type RateLimiter struct {
 	tokens    chan struct{}
@@ -124,26 +143,19 @@ type RateLimiter struct {
 	mu        sync.Mutex
 }
 
-// 创建限流器
+// 限流器
 func NewRateLimiter(rate time.Duration, burst int) *RateLimiter {
 	rl := &RateLimiter{
 		tokens: make(chan struct{}, burst),
 		rate:   rate,
 		burst:  burst,
 	}
-
-	// 初始化令牌桶
 	for i := 0; i < burst; i++ {
 		rl.tokens <- struct{}{}
 	}
-
-	// 启动令牌补充
 	go rl.refillTokens()
-
 	return rl
 }
-
-// 补充令牌
 func (rl *RateLimiter) refillTokens() {
 	ticker := time.NewTicker(rl.rate)
 	defer ticker.Stop()
@@ -156,8 +168,6 @@ func (rl *RateLimiter) refillTokens() {
 		}
 	}
 }
-
-// 尝试获取令牌
 func (rl *RateLimiter) Allow() bool {
 	select {
 	case <-rl.tokens:
@@ -166,8 +176,6 @@ func (rl *RateLimiter) Allow() bool {
 		return false
 	}
 }
-
-// 等待获取令牌
 func (rl *RateLimiter) Wait(ctx context.Context) error {
 	select {
 	case <-rl.tokens:
