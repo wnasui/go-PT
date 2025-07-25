@@ -9,7 +9,7 @@ import (
 )
 
 type SenderStruct struct {
-	conn *amqp.Connection
+	Conn *amqp.Connection
 }
 
 type Sender interface {
@@ -17,7 +17,7 @@ type Sender interface {
 }
 
 func (s *SenderStruct) SendOrder(ctx context.Context, body model.Order) error {
-	ch, err := s.conn.Channel()
+	ch, err := s.Conn.Channel()
 	if err != nil {
 		return err
 	}

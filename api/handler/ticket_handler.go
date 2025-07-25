@@ -13,9 +13,9 @@ import (
 )
 
 type TicketHandler struct {
-	ticketService service.TicketSrv
-	redisRepo     repository.RedisRepository
-	localRepo     repository.LocalRepository
+	TicketService service.TicketSrv
+	RedisRepo     repository.RedisRepository
+	LocalRepo     repository.LocalRepository
 }
 
 func (h *TicketHandler) GetEntity(ticket model.Ticket) response.Ticket {
@@ -48,7 +48,7 @@ func (h *TicketHandler) TicketInfoHandler(c *gin.Context) {
 	ticket := model.Ticket{
 		TicketId: ticketId,
 	}
-	result, err := h.ticketService.Get(c, &ticket)
+	result, err := h.TicketService.Get(c, &ticket)
 	if err != nil {
 		entity.Code = int(enum.OperateFailed)
 		entity.Msg = enum.OperateFailed.String()
@@ -89,7 +89,7 @@ func (h *TicketHandler) TicketBuyHandler(c *gin.Context) {
 	userInfo := user.(response.User)
 
 	// 抢票
-	result, err := h.ticketService.BuyTicketWriteThrough(c.Request.Context(), &ticket, userInfo)
+	result, err := h.TicketService.BuyTicketWriteThrough(c.Request.Context(), &ticket, userInfo)
 	if err != nil {
 		entity.Code = int(enum.OperateFailed)
 		entity.Msg = "抢票失败: " + err.Error()
@@ -116,7 +116,7 @@ func (h *TicketHandler) TicketBuyHandler(c *gin.Context) {
 func (h *TicketHandler) WarmUpCache(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	err := h.ticketService.WarmUpCache(ctx)
+	err := h.TicketService.WarmUpCache(ctx)
 	if err != nil {
 		entity := response.Entity{
 			Code: int(enum.OperateFailed),
@@ -137,7 +137,7 @@ func (h *TicketHandler) WarmUpCache(c *gin.Context) {
 func (h *TicketHandler) GetCacheStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	stats, err := h.ticketService.GetCacheStats(ctx)
+	stats, err := h.TicketService.GetCacheStats(ctx)
 	if err != nil {
 		entity := response.Entity{
 			Code: int(enum.OperateFailed),
@@ -171,7 +171,7 @@ func (h *TicketHandler) TicketListReadThroughHandler(c *gin.Context) {
 		return
 	}
 
-	tickets, err := h.ticketService.ListByTicketTagReadThrough(c, &trainnumber)
+	tickets, err := h.TicketService.ListByTicketTagReadThrough(c, &trainnumber)
 	if err != nil {
 		entity.Code = int(enum.OperateFailed)
 		entity.Msg = "查询失败: " + err.Error()

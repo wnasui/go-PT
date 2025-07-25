@@ -12,7 +12,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -81,7 +81,7 @@ type RedisRepoInterface interface {
 	GetBloomFilterStats(ctx context.Context) (map[string]interface{}, error)
 }
 
-// 获取票务分布式锁（带重试机制）
+// 获取票务分布式锁（自旋锁）
 func (repo *RedisRepository) AcquireTicketLock(ctx context.Context, ticketId string, expireTime time.Duration, maxRetries int, retryDelay time.Duration) (bool, string, error) {
 	lockKey := fmt.Sprintf("ticket_lock_%s", ticketId)
 	lockValue := utils.GetUUID()
@@ -303,7 +303,7 @@ func (repo *RedisRepository) GetLockStats(ctx context.Context) (map[string]inter
 	return stats, nil
 }
 
-// 安全的分布式锁包装器
+// 安全的分布式锁包装器 防止用户多次购票
 type SafeDistributedLock struct {
 	repo       *RedisRepository
 	ticketId   string
@@ -328,12 +328,12 @@ func (repo *RedisRepository) NewSafeDistributedLock(ticketId string, expireTime 
 
 // 获取锁
 func (lock *SafeDistributedLock) Acquire(ctx context.Context) (bool, error) {
-	lock.mu.Lock()
-	defer lock.mu.Unlock()
+	// lock.mu.Lock()
+	// defer lock.mu.Unlock()
 
-	if lock.released {
-		return false, errors.New("锁已被释放")
-	}
+	// if lock.released {
+	// 	return false, errors.New("锁已被释放")
+	// }
 
 	acquired, lockValue, err := lock.repo.AcquireTicketLock(ctx, lock.ticketId, lock.expireTime, 3, 100*time.Millisecond)
 	if err != nil {
@@ -384,12 +384,12 @@ func (lock *SafeDistributedLock) startRenewal() {
 
 // 释放锁
 func (lock *SafeDistributedLock) Release(ctx context.Context) error {
-	lock.mu.Lock()
-	defer lock.mu.Unlock()
+	// lock.mu.Lock()
+	// defer lock.mu.Unlock()
 
-	if lock.released {
-		return nil // 已经释放过了
-	}
+	// if lock.released {
+	// 	return nil // 已经释放过了
+	// }
 
 	// 停止续期协程
 	if lock.cancel != nil {

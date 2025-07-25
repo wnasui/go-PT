@@ -13,7 +13,7 @@ import (
 )
 
 type UserService struct {
-	userRepo repository.UserRepository
+	UserRepo repository.UserRepository
 }
 
 type UserSrv interface {
@@ -35,28 +35,32 @@ func (s *UserService) List(ctx context.Context, req *query.ListQuery) ([]*model.
 	if req.PageSize <= 1 {
 		req.PageSize = config.PageSize
 	}
-	return s.userRepo.List(ctx, req)
+	return s.UserRepo.List(ctx, req)
 }
 
-func (s *UserService) GetTotal(ctx context.Context, req *query.ListQuery) (int64, error) {
+func (s *UserService) GetTotal(ctx context.Context, req *query.ListQuery) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	return s.userRepo.GetTotal(ctx, req)
+	total, err := s.UserRepo.GetTotal(ctx, req)
+	if err != nil {
+		return 0, err
+	}
+	return int(total), nil
 }
 
 func (s *UserService) Get(ctx context.Context, user *model.User) (*model.User, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return s.userRepo.Get(ctx, user)
+	return s.UserRepo.Get(ctx, user)
 }
 
 func (s *UserService) GetByUserIdentity(ctx context.Context, userIdentity string) (*model.User, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	User, err := s.userRepo.GetByUserIdentity(ctx, userIdentity)
+	User, err := s.UserRepo.GetByUserIdentity(ctx, userIdentity)
 	if err != nil {
 		fmt.Println("查询用户失败", err)
 		return nil, err
@@ -72,14 +76,14 @@ func (s *UserService) Exist(ctx context.Context, user *model.User) (bool, error)
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	return s.userRepo.Exist(ctx, user)
+	return s.UserRepo.Exist(ctx, user)
 }
 
 func (s *UserService) Create(ctx context.Context, user *model.User) (*model.User, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	result, err := s.userRepo.Exist(ctx, user)
+	result, err := s.UserRepo.Exist(ctx, user)
 	if err != nil {
 		fmt.Println("查询用户是否存在失败", err)
 		return nil, err
@@ -89,14 +93,14 @@ func (s *UserService) Create(ctx context.Context, user *model.User) (*model.User
 		return nil, nil
 	}
 	user.UserId = utils.GetUUID()
-	return s.userRepo.CreateUser(ctx, user)
+	return s.UserRepo.CreateUser(ctx, user)
 }
 
 func (s *UserService) Login(ctx context.Context, user *model.User) (*model.User, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	User, err := s.userRepo.GetByUserPhone(ctx, user.UserPhone)
+	User, err := s.UserRepo.GetByUserPhone(ctx, user.UserPhone)
 	if err != nil {
 		fmt.Println("用户账号不存在", err)
 		return nil, err
@@ -112,7 +116,7 @@ func (s *UserService) Edit(ctx context.Context, user *model.User) (bool, error) 
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	result, err := s.userRepo.Exist(ctx, user)
+	result, err := s.UserRepo.Exist(ctx, user)
 	if err != nil {
 		fmt.Println("查询用户是否存在失败", err)
 		return false, err
@@ -121,7 +125,7 @@ func (s *UserService) Edit(ctx context.Context, user *model.User) (bool, error) 
 		fmt.Println("用户不存在")
 		return false, nil
 	}
-	exist, err := s.userRepo.Get(ctx, user)
+	exist, err := s.UserRepo.Get(ctx, user)
 	if err != nil {
 		fmt.Println("查询用户失败", err)
 		return false, err
@@ -135,21 +139,42 @@ func (s *UserService) Edit(ctx context.Context, user *model.User) (bool, error) 
 	exist.UpdateTime = time.Now()
 	exist.UserPwd = user.UserPwd
 
-	return s.userRepo.Edit(ctx, exist)
+	return s.UserRepo.Edit(ctx, exist)
 }
 
-func (s *UserService) Delete(ctx context.Context, user *model.User) (bool, error) {
+func (s *UserService) Delete(ctx context.Context, user *model.User) (*model.User, error) {
 	if err := ctx.Err(); err != nil {
-		return false, err
+		return nil, err
 	}
-	result, err := s.userRepo.Exist(ctx, user)
+	result, err := s.UserRepo.Exist(ctx, user)
 	if err != nil {
 		fmt.Println("查询用户是否存在失败", err)
-		return false, err
+		return nil, err
 	}
 	if !result {
 		fmt.Println("用户不存在")
-		return false, nil
+		return nil, nil
 	}
-	return s.userRepo.Delete(ctx, user)
+
+	// 先获取用户信息
+	deletedUser, err := s.UserRepo.Get(ctx, user)
+	if err != nil {
+		fmt.Println("获取用户信息失败", err)
+		return nil, err
+	}
+	if deletedUser == nil {
+		fmt.Println("用户不存在")
+		return nil, nil
+	}
+
+	// 执行删除操作
+	success, err := s.UserRepo.Delete(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	if !success {
+		return nil, fmt.Errorf("删除用户失败")
+	}
+
+	return deletedUser, nil
 }

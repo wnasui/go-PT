@@ -31,12 +31,17 @@ func (c *Config) InitConfig() error {
 		viper.SetConfigName(c.Name)
 	} else {
 		viper.AddConfigPath("conf")
-		viper.SetConfigName("config")
+		viper.SetConfigName("conf")
 	}
 	viper.SetConfigType("yaml")
 	err := viper.ReadInConfig()
 	if err != nil {
-		return err
+		// 尝试不同的配置文件名称
+		viper.SetConfigName("config")
+		err = viper.ReadInConfig()
+		if err != nil {
+			return fmt.Errorf("无法读取配置文件: %v", err)
+		}
 	}
 	return nil
 }

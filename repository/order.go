@@ -18,7 +18,7 @@ type OrderRepoInterface interface {
 	List(ctx context.Context, req *query.ListQuery) ([]*model.Order, error)
 	GetTotal(ctx context.Context, req *query.ListQuery) (int64, error)
 	Get(ctx context.Context, order model.Order) (*model.Order, error)
-	Exist(ctx context.Context, order model.Order) (bool, error)
+	Exist(ctx context.Context, order *model.Order) (bool, error)
 	CreateOrder(ctx context.Context, order *model.Order) (*model.Order, error)
 	Edit(ctx context.Context, order *model.Order) (bool, error)
 	Delete(ctx context.Context, order *model.Order) (bool, error)
@@ -69,7 +69,7 @@ func (repo *OrderRepository) Get(ctx context.Context, order model.Order) (*model
 	return &Order, nil
 }
 
-func (repo *OrderRepository) Exist(ctx context.Context, order model.Order) (bool, error) {
+func (repo *OrderRepository) Exist(ctx context.Context, order *model.Order) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -111,22 +111,21 @@ func (repo *OrderRepository) Edit(ctx context.Context, order *model.Order) (bool
 	return true, nil
 }
 
-func (repo *OrderRepository) Delete(ctx context.Context, order model.Order) (bool, error) {
+func (repo *OrderRepository) Delete(ctx context.Context, order *model.Order) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
 	db := repo.DB
-	err := db.Model(&order).Where("order_id=?", order.OrderId).Delete(&order).Error
+	err := db.Where("order_id=?", order.OrderId).Delete(&model.Order{}).Error
 	if err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func (repo *OrderRepository) ExecuteTransaction(fn func(r *OrderRepository) error) error {
+func (repo *OrderRepository) ExecuteTransaction(fn func(ctx context.Context) error) error {
 	return repo.DB.Transaction(func(tx *gorm.DB) error {
-		txOrderRepo := &OrderRepository{DB: tx}
-		return fn(txOrderRepo)
+		return fn(context.Background())
 	})
 }
 
@@ -137,7 +136,7 @@ func (repo *OrderRepository) ProcessOrderFromMQ(ctx context.Context, order *mode
 	}
 
 	// 检查订单是否已存在
-	exists, err := repo.Exist(ctx, *order)
+	exists, err := repo.Exist(ctx, order)
 	if err != nil {
 		return err
 	}
@@ -159,9 +158,9 @@ func (repo *OrderRepository) BatchProcessOrdersFromMQ(ctx context.Context, order
 		return err
 	}
 
-	return repo.ExecuteTransaction(func(r *OrderRepository) error {
+	return repo.ExecuteTransaction(func(ctx context.Context) error {
 		for _, order := range orders {
-			if err := r.ProcessOrderFromMQ(ctx, order); err != nil {
+			if err := repo.ProcessOrderFromMQ(ctx, order); err != nil {
 				return err
 			}
 		}

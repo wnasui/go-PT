@@ -12,7 +12,7 @@ import (
 )
 
 type UserHandler struct {
-	userService service.UserSrv
+	UserService service.UserSrv
 }
 
 func (h *UserHandler) GetEntity(user model.User) response.User {
@@ -44,7 +44,7 @@ func (h *UserHandler) UserInfoHandler(c *gin.Context) {
 	user := model.User{
 		UserId: userId,
 	}
-	result, err := h.userService.Get(c, &user)
+	result, err := h.UserService.Get(c, &user)
 	if err != nil {
 		entity.Code = int(enum.OperateFailed)
 		entity.Msg = enum.OperateFailed.String()
@@ -116,7 +116,7 @@ func (h *UserHandler) UserCreateHandler(c *gin.Context) {
 		return
 	}
 
-	_, err := h.userService.Create(c, &user)
+	_, err := h.UserService.Create(c, &user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
 		return
@@ -139,7 +139,7 @@ func (h *UserHandler) UserEditHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
 		return
 	}
-	b, err := h.userService.Edit(c, &user)
+	b, err := h.UserService.Edit(c, &user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
 		return
@@ -170,7 +170,7 @@ func (h *UserHandler) UserDeleteHandler(c *gin.Context) {
 	user := model.User{
 		UserId: userId,
 	}
-	_, err := h.userService.Delete(c, &user)
+	_, err := h.UserService.Delete(c, &user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
 		return
@@ -193,7 +193,7 @@ func (h *UserHandler) UserLoginHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
 		return
 	}
-	result, err := h.userService.Login(c, &user)
+	result, err := h.UserService.Login(c, &user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
 		return

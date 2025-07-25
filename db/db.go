@@ -1,7 +1,6 @@
 package db
 
 import (
-	"12305/config"
 	"12305/model"
 	"fmt"
 
@@ -17,12 +16,6 @@ var (
 	Redis    *redis.Client
 	RabbitMQ *amqp.Connection
 )
-
-func initViper() {
-	if err := config.Init(""); err != nil {
-		panic("failed to init config")
-	}
-}
 
 func InitDatabase() {
 	conf := &model.DBConf{
@@ -71,10 +64,4 @@ func InitRabbitMQ() {
 	if err != nil {
 		panic("failed to connect rabbitmq")
 	}
-}
-func init() {
-	initViper()
-	InitDatabase()
-	InitRedis()
-	InitRabbitMQ()
 }

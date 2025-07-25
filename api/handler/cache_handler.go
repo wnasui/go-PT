@@ -10,12 +10,12 @@ import (
 )
 
 type CacheHandler struct {
-	ticketService service.TicketSrv
+	TicketService service.TicketSrv
 }
 
 func NewCacheHandler(ticketService service.TicketSrv) *CacheHandler {
 	return &CacheHandler{
-		ticketService: ticketService,
+		TicketService: ticketService,
 	}
 }
 
@@ -24,7 +24,7 @@ func (h *CacheHandler) GetCacheStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// 获取缓存统计
-	stats, err := h.ticketService.GetCacheStats(ctx)
+	stats, err := h.TicketService.GetCacheStats(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -55,7 +55,7 @@ func (h *CacheHandler) GetCacheStats(c *gin.Context) {
 func (h *CacheHandler) WarmUpCache(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	err := h.ticketService.WarmUpCache(ctx)
+	err := h.TicketService.WarmUpCache(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,

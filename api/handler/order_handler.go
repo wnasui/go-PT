@@ -12,7 +12,7 @@ import (
 )
 
 type OrderHandler struct {
-	orderService service.OrderSrv
+	OrderService service.OrderSrv
 }
 
 func (h *OrderHandler) GetEntity(order model.Order) response.Order {
@@ -60,7 +60,7 @@ func (h *OrderHandler) OrderInfoHandler(c *gin.Context) {
 		OrderId: orderId,
 	}
 
-	result, err := h.orderService.Get(c, &order)
+	result, err := h.OrderService.Get(c, &order)
 	if err != nil {
 		entity.Code = int(enum.OperateFailed)
 		entity.Msg = enum.OperateFailed.String()

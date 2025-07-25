@@ -2,7 +2,6 @@ package api
 
 import (
 	"12305/api/handler"
-	"12305/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,30 +11,33 @@ func InitRouter(UserHandler *handler.UserHandler, TicketHandler *handler.TicketH
 	//router.Use(cors.Default())//跨域
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
-	router.Use(middleware.JwtAuth()) //事实上涉及支付使用session+cookie更安全
+	//router.Use(middleware.JwtAuth()) //事实上涉及支付使用session+cookie更安全
 
-	router.Group("/user")
+	// 用户相关路由
+	userGroup := router.Group("/user")
 	{
-		router.POST("/register", UserHandler.UserCreateHandler)
-		router.POST("/login", UserHandler.UserLoginHandler)
-		router.GET("/info", UserHandler.UserInfoHandler)
-		router.PUT("/edit", UserHandler.UserEditHandler)
-		router.DELETE("/delete", UserHandler.UserDeleteHandler)
+		userGroup.POST("/register", UserHandler.UserCreateHandler)
+		userGroup.POST("/login", UserHandler.UserLoginHandler)
+		userGroup.GET("/info", UserHandler.UserInfoHandler)
+		userGroup.PUT("/edit", UserHandler.UserEditHandler)
+		userGroup.DELETE("/delete", UserHandler.UserDeleteHandler)
 	}
 
-	router.Group("/ticket")
+	// 票务相关路由
+	ticketGroup := router.Group("/ticket")
 	{
-		router.GET("/list", TicketHandler.TicketListReadThroughHandler)
-		router.POST("/buy", TicketHandler.TicketBuyHandler)
+		ticketGroup.GET("/list", TicketHandler.TicketListReadThroughHandler)
+		ticketGroup.POST("/buy", TicketHandler.TicketBuyHandler)
 		// 新增：缓存管理路由
-		router.POST("/cache/warmup", TicketHandler.WarmUpCache)
-		router.GET("/cache/stats", TicketHandler.GetCacheStats)
+		ticketGroup.POST("/cache/warmup", TicketHandler.WarmUpCache)
+		ticketGroup.GET("/cache/stats", TicketHandler.GetCacheStats)
 	}
 
-	router.Group("/order")
+	// 订单相关路由
+	orderGroup := router.Group("/order")
 	{
-		router.GET("/info", OrderHandler.OrderInfoHandler)
-		router.POST("/pay", OrderHandler.OrderPayHandler)
+		orderGroup.GET("/info", OrderHandler.OrderInfoHandler)
+		orderGroup.POST("/pay", OrderHandler.OrderPayHandler)
 	}
 
 	return router

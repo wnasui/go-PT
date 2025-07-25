@@ -12,7 +12,7 @@ import (
 )
 
 type OrderService struct {
-	orderRepo repository.OrderRepository
+	OrderRepo repository.OrderRepository
 }
 
 type OrderSrv interface {
@@ -29,15 +29,15 @@ type OrderSrv interface {
 }
 
 func (s *OrderService) List(ctx context.Context, req *query.ListQuery) ([]*model.Order, error) {
-	return s.orderRepo.List(ctx, req)
+	return s.OrderRepo.List(ctx, req)
 }
 
 func (s *OrderService) GetTotal(ctx context.Context, req *query.ListQuery) (int64, error) {
-	return s.orderRepo.GetTotal(ctx, req)
+	return s.OrderRepo.GetTotal(ctx, req)
 }
 
 func (s *OrderService) Get(ctx context.Context, order *model.Order) (*model.Order, error) {
-	exist, err := s.orderRepo.Exist(ctx, *order)
+	exist, err := s.OrderRepo.Exist(ctx, order)
 	if err != nil {
 		return nil, err
 	}
@@ -45,15 +45,15 @@ func (s *OrderService) Get(ctx context.Context, order *model.Order) (*model.Orde
 		fmt.Println("订单不存在")
 		return nil, nil
 	}
-	return s.orderRepo.Get(ctx, *order)
+	return s.OrderRepo.Get(ctx, *order)
 }
 
 func (s *OrderService) Exist(ctx context.Context, order *model.Order) (bool, error) {
-	return s.orderRepo.Exist(ctx, *order)
+	return s.OrderRepo.Exist(ctx, order)
 }
 
 func (s *OrderService) Create(ctx context.Context, order *model.Order) (*model.Order, error) {
-	exist, err := s.orderRepo.Exist(ctx, *order)
+	exist, err := s.OrderRepo.Exist(ctx, order)
 	if err != nil {
 		return nil, err
 	}
@@ -67,11 +67,11 @@ func (s *OrderService) Create(ctx context.Context, order *model.Order) (*model.O
 	order.CreateTime = time.Now()
 	order.UpdateTime = time.Now()
 	order.OrderStatus = enum.OrderStatusNormal
-	return s.orderRepo.CreateOrder(ctx, order)
+	return s.OrderRepo.CreateOrder(ctx, order)
 }
 
-func (s *OrderService) Delete(ctx context.Context, order *model.Order) (bool, error) {
-	exist, err := s.orderRepo.Exist(ctx, *order)
+func (s *OrderService) Edit(ctx context.Context, order *model.Order) (bool, error) {
+	exist, err := s.OrderRepo.Exist(ctx, order)
 	if err != nil {
 		return false, err
 	}
@@ -79,7 +79,19 @@ func (s *OrderService) Delete(ctx context.Context, order *model.Order) (bool, er
 		fmt.Println("订单不存在")
 		return false, nil
 	}
-	return s.orderRepo.Delete(ctx, *order)
+	return s.OrderRepo.Edit(ctx, order)
+}
+
+func (s *OrderService) Delete(ctx context.Context, order *model.Order) (bool, error) {
+	exist, err := s.OrderRepo.Exist(ctx, order)
+	if err != nil {
+		return false, err
+	}
+	if !exist {
+		fmt.Println("订单不存在")
+		return false, nil
+	}
+	return s.OrderRepo.Delete(ctx, order)
 }
 
 // ProcessOrderFromMQ 处理来自消息队列的订单（包含业务逻辑验证）
@@ -96,7 +108,7 @@ func (s *OrderService) ProcessOrderFromMQ(ctx context.Context, order *model.Orde
 	order.UpdateTime = time.Now()
 
 	// 3. 调用Repository层处理数据存储
-	return s.orderRepo.ProcessOrderFromMQ(ctx, order)
+	return s.OrderRepo.ProcessOrderFromMQ(ctx, order)
 }
 
 // ValidateOrderFromMQ 验证来自消息队列的订单数据
