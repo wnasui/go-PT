@@ -76,8 +76,8 @@ func (s *TicketService) BuyTicketWriteThrough(ctx context.Context, ticket *model
 			return errors.New("票已售出或不可用")
 		}
 
-		// 更新数据库
-		success, err := r.UpdateTicketStatusWithOptimisticLock(ctx, ticket.TicketId, currentTicket.Version, enum.TicketStatusSold)
+		// 使用带重试的乐观锁更新数据库
+		success, err := r.UpdateTicketStatusWithOptimisticLockRetry(ctx, ticket.TicketId, enum.TicketStatusSold, 3)
 		if err != nil {
 			return fmt.Errorf("更新票务状态失败: %v", err)
 		}

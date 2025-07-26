@@ -6,6 +6,8 @@ import (
 	"12305/query"
 	"12305/utils"
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -33,6 +35,8 @@ type TicketRepoInterface interface {
 	DecreaseStockWithOptimisticLock(ctx context.Context, ticketId string, version int64) (bool, error)
 	// 乐观锁更新票务状态
 	UpdateTicketStatusWithOptimisticLock(ctx context.Context, ticketId string, oldVersion int64, newStatus enum.TicketStatus) (bool, error)
+	// 带重试的乐观锁更新票务状态
+	UpdateTicketStatusWithOptimisticLockRetry(ctx context.Context, ticketId string, newStatus enum.TicketStatus, maxRetries int) (bool, error)
 }
 
 func (repo *TicketRepository) List(ctx context.Context, req *query.ListQuery) ([]*model.Ticket, error) {
@@ -183,6 +187,11 @@ func (repo *TicketRepository) UpdateTicketStatusWithOptimisticLock(ctx context.C
 		return false, err
 	}
 
+	// 验证版本号合理性
+	if oldVersion < 0 {
+		return false, fmt.Errorf("无效的版本号: %d", oldVersion)
+	}
+
 	result := repo.DB.Model(&model.Ticket{}).
 		Where("ticket_id = ? AND version = ? AND status = ?", ticketId, oldVersion, enum.TicketStatusNormal).
 		Updates(map[string]interface{}{
@@ -197,4 +206,64 @@ func (repo *TicketRepository) UpdateTicketStatusWithOptimisticLock(ctx context.C
 
 	// 检查是否真的更新了记录
 	return result.RowsAffected > 0, nil
+}
+
+// UpdateTicketStatusWithOptimisticLockRetry 带重试的乐观锁更新
+func (repo *TicketRepository) UpdateTicketStatusWithOptimisticLockRetry(ctx context.Context, ticketId string, newStatus enum.TicketStatus, maxRetries int) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	if maxRetries <= 0 {
+		maxRetries = 3 // 默认重试3次
+	}
+
+	for i := 0; i < maxRetries; i++ {
+		// 重新获取最新数据
+		currentTicket, err := repo.Get(ctx, &model.Ticket{TicketId: ticketId})
+		if err != nil {
+			// 如果是最后一次重试，返回错误
+			if i == maxRetries-1 {
+				return false, fmt.Errorf("获取票务信息失败: %v", err)
+			}
+			// 否则继续重试
+			continue
+		}
+
+		// 检查票务状态
+		if currentTicket.TicketStatus != enum.TicketStatusNormal {
+			return false, errors.New("票已售出或不可用")
+		}
+
+		// 检查版本号异常
+		if currentTicket.Version < 0 {
+			return false, fmt.Errorf("票务版本号异常: %d", currentTicket.Version)
+		}
+
+		// 尝试乐观锁更新
+		success, err := repo.UpdateTicketStatusWithOptimisticLock(ctx, ticketId, currentTicket.Version, newStatus)
+		if err != nil {
+			// 如果是最后一次重试，返回错误
+			if i == maxRetries-1 {
+				return false, err
+			}
+			// 否则继续重试
+			continue
+		}
+
+		if success {
+			return true, nil
+		}
+
+		// 如果失败且还有重试次数，等待一小段时间后重试
+		if i < maxRetries-1 {
+			select {
+			case <-time.After(10 * time.Millisecond):
+			case <-ctx.Done():
+				return false, ctx.Err()
+			}
+		}
+	}
+
+	return false, nil
 }
