@@ -157,7 +157,7 @@ func (h *TicketHandler) GetCacheStats(c *gin.Context) {
 
 // Read-Through模式查询车票
 func (h *TicketHandler) TicketListReadThroughHandler(c *gin.Context) {
-	var trainnumber string
+	var tickettag string
 	entity := response.Entity{
 		Code:      int(enum.OperateOK),
 		Msg:       enum.OperateOK.String(),
@@ -166,12 +166,12 @@ func (h *TicketHandler) TicketListReadThroughHandler(c *gin.Context) {
 		Data:      nil,
 	}
 
-	if err := c.ShouldBindQuery(&trainnumber); err != nil {
+	if err := c.ShouldBindQuery(&tickettag); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"entity": entity})
 		return
 	}
 
-	tickets, err := h.TicketService.ListByTicketTagReadThrough(c, &trainnumber)
+	tickets, err := h.TicketService.ListByTicketTagReadThrough(c, tickettag)
 	if err != nil {
 		entity.Code = int(enum.OperateFailed)
 		entity.Msg = "查询失败: " + err.Error()

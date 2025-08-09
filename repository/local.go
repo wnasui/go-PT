@@ -15,9 +15,9 @@ type LocalRepository struct {
 }
 
 type LocalRepoInterface interface {
-	Get(ctx context.Context, key string) (interface{}, error)
+	Get(ctx context.Context, key string) ([]*model.Ticket, error)
 	GetByTicketTag(ctx context.Context, tickettag string) ([]*model.Ticket, error)
-	// 本地缓存不存在扣减，只读缓存
+	Decr(ctx context.Context, tickettag string, ticket model.Ticket) ([]*model.Ticket, error)
 	RefreshCache(ctx context.Context, tickettag string) error
 	InvalidateCache(ctx context.Context, tickettag string) error
 	// 新增：缓存统计
@@ -25,6 +25,21 @@ type LocalRepoInterface interface {
 }
 
 var localCache = utils.GetCache()
+
+// 获取本地缓存
+func (repo *LocalRepository) Get(ctx context.Context, key string) ([]*model.Ticket, error) {
+	return localCache.Get(ctx, key)
+}
+
+func (repo *LocalRepository) Decr(ctx context.Context, tickettag string, ticket model.Ticket) ([]*model.Ticket, error) {
+	if tickets, err := repo.GetByTicketTag(ctx, tickettag); err == nil {
+		if len(tickets) > 0 {
+			localCache.Edit(ctx, tickettag, &ticket)
+			return tickets, nil
+		}
+	}
+	return nil, nil
+}
 
 // 本地获取同车次票（只读）
 func (repo *LocalRepository) GetByTicketTag(ctx context.Context, tickettag string) ([]*model.Ticket, error) {

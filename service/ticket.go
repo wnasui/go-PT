@@ -25,7 +25,7 @@ type TicketSrv interface {
 	// GetTotal(ctx context.Context, req *query.ListQuery) (int64, error)
 	Get(ctx context.Context, ticket *model.Ticket) (*model.Ticket, error)
 	//缓存穿透模式
-	ListByTicketTagReadThrough(ctx context.Context, trainnumber interface{}) ([]*model.Ticket, error)
+	ListByTicketTagReadThrough(ctx context.Context, tickettag string) ([]*model.Ticket, error)
 	BuyTicketWriteThrough(ctx context.Context, ticket *model.Ticket, user response.User) (bool, error)
 	Create(ctx context.Context, ticket *model.Ticket) (*model.Ticket, error)
 	Edit(ctx context.Context, ticket *model.Ticket) (bool, error)
@@ -63,7 +63,7 @@ func (s *TicketService) BuyTicketWriteThrough(ctx context.Context, ticket *model
 		}
 	}()
 
-	// 执行业务逻辑
+	// 执行业务逻辑（事务 + 乐观锁）
 	err = s.TicketRepo.ExecuteTransaction(func(r *repository.TicketRepository) error {
 		// 获取当前票务信息
 		currentTicket, err := r.Get(ctx, ticket)
@@ -86,7 +86,7 @@ func (s *TicketService) BuyTicketWriteThrough(ctx context.Context, ticket *model
 			return errors.New("抢票失败，票已被其他用户购买")
 		}
 
-		// 更新票务状态
+		// 更新票务状态（用于缓存同步）
 		currentTicket.TicketStatus = enum.TicketStatusSold
 		currentTicket.Version++
 		currentTicket.UpdateTime = time.Now()
@@ -125,7 +125,6 @@ func (s *TicketService) BuyTicketWriteThrough(ctx context.Context, ticket *model
 	if err := s.LocalRepo.InvalidateCache(ctx, string(ticket.TicketTag)); err != nil {
 		fmt.Printf("使本地缓存失效失败: %v\n", err)
 	}
-
 	fmt.Println("抢票成功")
 	return true, nil
 }
@@ -247,41 +246,44 @@ func (s *TicketService) GetCacheStats(ctx context.Context) (map[string]interface
 }
 
 // 实现Read-Through模式
-func (s *TicketService) ListByTicketTagReadThrough(ctx context.Context, trainnumber interface{}) ([]*model.Ticket, error) {
+func (s *TicketService) ListByTicketTagReadThrough(ctx context.Context, tickettag string) ([]*model.Ticket, error) {
+	tickets, err := s.LocalRepo.Get(ctx, tickettag)
+	if err == nil && len(tickets) > 0 {
+		fmt.Printf("Read-Through: 从本地缓存获取到 %d 张票\n", len(tickets))
+		return tickets, nil
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	tickettag := trainnumber.(string)
-
-	// 1. 首先尝试从Redis缓存读取（Read-Through的核心）
-	tickets, err := s.RedisRepo.GetByTicketTag(ctx, tickettag)
+	// 尝试从Redis缓存读取（Read-Through的核心）
+	tickets, err = s.RedisRepo.GetByTicketTag(ctx, tickettag)
 	if err == nil && len(tickets) > 0 {
 		fmt.Printf("Read-Through: 从Redis缓存获取到 %d 张票\n", len(tickets))
 		return tickets, nil
 	}
 
-	// 2. 防击穿：使用互斥锁保护数据库访问
+	// 防击穿：使用互斥锁保护数据库访问
 	protector := utils.GetCacheProtector()
 	mutex := protector.GetMutex(tickettag)
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	// 3. 双重检查：再次尝试从缓存读取
+	// 双重检查：再次尝试从缓存读取
 	tickets, err = s.RedisRepo.GetByTicketTag(ctx, tickettag)
 	if err == nil && len(tickets) > 0 {
 		fmt.Printf("Read-Through: 双重检查从Redis缓存获取到 %d 张票\n", len(tickets))
 		return tickets, nil
 	}
 
-	// 4. 缓存未命中，从数据库读取
+	// 缓存未命中，从数据库读取
 	fmt.Printf("Read-Through: Redis缓存未命中，从数据库加载车次 %s 的票务信息\n", tickettag)
 	tickets, err = s.TicketRepo.GetByTicketTag(ctx, []enum.TicketTag{enum.TicketTag(tickettag)})
 	if err != nil {
 		return nil, fmt.Errorf("从数据库加载票务信息失败: %v", err)
 	}
 
-	// 5. 将数据写入缓存
+	// 将数据写入缓存
 	if len(tickets) > 0 {
 		// 批量更新Redis缓存
 		for _, ticket := range tickets {
@@ -300,7 +302,6 @@ func (s *TicketService) ListByTicketTagReadThrough(ctx context.Context, trainnum
 		// 防穿透：缓存空结果
 		protector.CacheNull(tickettag, 5*time.Minute)
 	}
-
 	return tickets, nil
 }
 
